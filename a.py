@@ -3,10 +3,16 @@ import os
 import subprocess
 import uuid
 import logging
+import static_ffmpeg
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, FSInputFile
 from aiogram.filters import CommandStart
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+
+static_ffmpeg.add_paths()
 
 BOT_TOKEN = "8768265521:AAGdZFuAESGMN_vlQqUDApi-LAgYwpn2fj0"
 
@@ -14,7 +20,13 @@ TEMP_DIR = "temp_webm"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 logging.basicConfig(level=logging.INFO)
-bot = Bot(token=BOT_TOKEN)
+
+session = AiohttpSession()
+bot = Bot(
+    token=BOT_TOKEN,
+    session=session,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
 dp = Dispatcher()
 
 
@@ -144,14 +156,13 @@ async def cmd_start(message: Message):
     await message.answer(
         "🎨 <b>Конвертер в Telegram видео-стикеры</b>\n\n"
         "Отправь мне короткое видео <b>MP4</b> (до 3 сек, до 20 МБ) — "
-        "я конвертирую его в <b>WebM VP9</b> готовый для загрузки в @Stickers.\n\n"
+        "я сконвертирую его в <b>WebM VP9</b> готовый для загрузки в @Stickers.\n\n"
         "<b>Требования Telegram:</b>\n"
         "• Одна сторона = 512px\n"
         "• Длительность ≤ 3 сек\n"
         "• Размер ≤ 256 КБ\n"
         "• Без звука\n"
-        "• FPS ≤ 30",
-        parse_mode="HTML"
+        "• FPS ≤ 30"
     )
 
 
@@ -164,13 +175,13 @@ async def handle_video(message: Message):
         mime = file_obj.mime_type or ""
         fname = file_obj.file_name or ""
         if "mp4" not in mime and not fname.endswith(".mp4"):
-            await message.answer("❌ Пожалуйста, отправь файл в формате <b>MP4</b>.", parse_mode="HTML")
+            await message.answer("❌ Пожалуйста, отправь файл в формате <b>MP4</b>.")
             return
     else:
         return
 
     if file_obj.file_size and file_obj.file_size > 20 * 1024 * 1024:
-        await message.answer("⚠️ Файл слишком большой. Лимит — <b>20 МБ</b>.", parse_mode="HTML")
+        await message.answer("⚠️ Файл слишком большой. Лимит — <b>20 МБ</b>.")
         return
 
     uid = uuid.uuid4().hex
@@ -198,8 +209,7 @@ async def handle_video(message: Message):
 
         if not success:
             await status_msg.edit_text(
-                f"❌ Ошибка конвертации:\n<code>{error}</code>",
-                parse_mode="HTML"
+                f"❌ Ошибка конвертации:\n<code>{error}</code>"
             )
             return
 
@@ -212,8 +222,7 @@ async def handle_video(message: Message):
             caption=(
                 f"✅ <b>Готово!</b> Размер: <b>{size_kb:.1f} КБ</b> / 256 КБ\n\n"
                 "📌 Загрузи файл в <b>@Stickers</b> → <i>Добавить видео-стикер</i>"
-            ),
-            parse_mode="HTML"
+            )
         )
         await status_msg.delete()
 
@@ -221,7 +230,7 @@ async def handle_video(message: Message):
         await status_msg.edit_text("❌ Превышено время конвертации (2 минуты).")
     except Exception as e:
         logging.exception(e)
-        await status_msg.edit_text(f"❌ Произошла ошибка: <code>{e}</code>", parse_mode="HTML")
+        await status_msg.edit_text(f"❌ Произошла ошибка: <code>{e}</code>")
     finally:
         for path in [input_path, output_path]:
             if os.path.exists(path):
@@ -230,13 +239,11 @@ async def handle_video(message: Message):
 
 @dp.message()
 async def fallback(message: Message):
-    await message.answer(
-        "📎 Отправь мне короткое видео <b>MP4</b> для конвертации в стикер.",
-        parse_mode="HTML"
-    )
+    await message.answer("📎 Отправь мне короткое видео <b>MP4</b> для конвертации в стикер.")
 
 
 async def main():
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 
